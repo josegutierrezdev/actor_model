@@ -21,16 +21,7 @@ namespace Akka.DI.CastleWindsor
             typeCache = new ConcurrentDictionary<string, Type>(StringComparer.InvariantCultureIgnoreCase);
         }
 
-        public ActorSystem CreateActorSystem(string SystemName)
-        {
-            if (SystemName == null) throw new ArgumentNullException("SystemName");
-            var system = ActorSystem.Create(SystemName);
-            system.RegisterExtension((IExtensionId)DIExtension.DIExtensionProvider);
-
-            DIExtension.DIExtensionProvider.Get(system).Initialize(this);
-            return system;
-        }
-
+      
         public Type GetType(string ActorName)
         {
             if (!typeCache.ContainsKey(ActorName))
@@ -47,12 +38,31 @@ namespace Akka.DI.CastleWindsor
             return typeCache[ActorName];
         }
 
-        public Func<ActorBase> CreateActor(string ActorName)
+        public Func<ActorBase> CreateActorFactory(string ActorName)
         {
             return () => (ActorBase)container.Resolve(GetType(ActorName));
         }
 
+        
 
+    }
+    internal static class Extensions
+    {
+        public static Type GetTypeValue(this string typeName)
+        {
+            var firstTry = Type.GetType(typeName);
+            Func<Type> searchForType = () =>
+            {
+                return
+                AppDomain.
+                    CurrentDomain.
+                    GetAssemblies().
+                    SelectMany(x => x.GetTypes()).
+                    Where(t => t.Name.Equals(typeName)).
+                    FirstOrDefault();
+            };
+            return firstTry ?? searchForType();
+        }
 
     }
 }

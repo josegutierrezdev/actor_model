@@ -46,7 +46,6 @@
     <Compile Include="DIExt.cs" />
     <Compile Include="DIExtension.cs" />
     <Compile Include="Extensions.cs" />
-    <Compile Include="DIExtensions.cs" />
     <Compile Include="IContainerConfiguration.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
