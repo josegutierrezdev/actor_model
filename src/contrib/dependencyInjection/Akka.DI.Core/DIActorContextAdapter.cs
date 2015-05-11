@@ -24,6 +24,12 @@ namespace Akka.DI.Core
         {
             return context.ActorOf(producer.Props(typeof(TActor)), name);
         }
+
+        public Props Props<TActor>() where TActor : ActorBase
+        {
+            return producer.Props(typeof(TActor));
+        }
+
     }
 }
 
