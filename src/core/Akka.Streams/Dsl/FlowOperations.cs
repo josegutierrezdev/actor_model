@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Akka.Dispatch.SysMsg;
 using Akka.Event;
 using Akka.IO;
+using Akka.Streams.Dsl.Internal;
 using Akka.Streams.Implementation;
 using Akka.Streams.Implementation.Fusing;
 using Akka.Streams.Stage;
@@ -486,7 +487,7 @@ namespace Akka.Streams.Dsl
         /// requested from upstream publishers that will then not be processed downstream
         /// of this step.
         /// 
-        /// Note that this can be combined with <see cref="Take{T,TMat}"/> to limit the number of elements
+        /// Note that this can be combined with <see cref="Implementation.Stages.Take{T}"/> to limit the number of elements
         /// within the duration.
         /// <para>
         /// '''Emits when''' an upstream element arrives
