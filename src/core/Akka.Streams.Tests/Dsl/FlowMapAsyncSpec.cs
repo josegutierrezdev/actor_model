@@ -59,11 +59,11 @@ namespace Akka.Streams.Tests.Dsl
         {
             var c = TestSubscriber.CreateManualProbe<int>(this);
             Source.From(Enumerable.Range(1, 50))
-                .MapAsync(4, i =>
+                .MapAsync(4, i => Task.Run(()=>
                 {
                     Thread.Sleep(ThreadLocalRandom.Current.Next(1, 10));
-                    return Task.FromResult(i);
-                })
+                    return i;
+                }))
                 .RunWith(Sink.FromSubscriber<int, Unit>(c), Materializer);
             var sub = c.ExpectSubscription();
             sub.Request(1000);
@@ -77,11 +77,11 @@ namespace Akka.Streams.Tests.Dsl
             var probe = CreateTestProbe();
             var c = TestSubscriber.CreateManualProbe<int>(this);
             Source.From(Enumerable.Range(1, 20))
-                .MapAsync(8, n =>
+                .MapAsync(8, n => Task.Run(() => 
                 {
                     probe.Ref.Tell(n);
-                    return Task.FromResult(n);
-                })
+                    return n;
+                }))
                 .RunWith(Sink.FromSubscriber<int, Unit>(c), Materializer);
             var sub = c.ExpectSubscription();
             probe.ExpectNoMsg(TimeSpan.FromMilliseconds(500));
@@ -241,7 +241,7 @@ namespace Akka.Streams.Tests.Dsl
         }
 
         [Fact]
-        public void A_Flow_with_MapAsync_must_signal_NullReferenceException_when_future_is_completed_with_null()
+        public void A_Flow_with_MapAsync_must_signal_NPE_when_future_is_completed_with_null()
         {
             var expected = ReactiveStreamsCompliance.ElementMustNotBeNullMsg + Environment.NewLine + "Parametername: element";
             var c = TestSubscriber.CreateManualProbe<string>(this);
