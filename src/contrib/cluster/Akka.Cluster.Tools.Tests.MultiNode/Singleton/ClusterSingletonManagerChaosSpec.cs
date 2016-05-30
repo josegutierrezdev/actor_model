@@ -6,7 +6,6 @@
 //-----------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using Akka.Actor;
 using Akka.Cluster.Tests.MultiNode;
@@ -16,25 +15,11 @@ using Akka.Remote.TestKit;
 using Akka.TestKit;
 using Akka.TestKit.Internal;
 using Akka.TestKit.TestEvent;
+using FluentAssertions;
 using Xunit;
 
-namespace Akka.Cluster.Tools.Tests.Singleton
+namespace Akka.Cluster.Tools.Tests.MultiNode.Singleton
 {
-    public sealed class EchoStarted
-    {
-        public static readonly EchoStarted Instance = new EchoStarted();
-
-        private EchoStarted() { }
-    }
-
-    public class Echo : ReceiveActor
-    {
-        public Echo(IActorRef testActor)
-        {
-            testActor.Tell(EchoStarted.Instance);
-            ReceiveAny(_ => Sender.Tell(Self));
-        }
-    }
     public class ClusterSingletonManagerChaosConfig : MultiNodeConfig
     {
         public readonly RoleName Controller;
@@ -48,7 +33,7 @@ namespace Akka.Cluster.Tools.Tests.Singleton
         public ClusterSingletonManagerChaosConfig()
         {
             Controller = Role("controller");
-            First = Role("first");
+            First = Role("_config.First");
             Second = Role("second");
             Third = Role("third");
             Fourth = Role("fourth");
@@ -56,115 +41,97 @@ namespace Akka.Cluster.Tools.Tests.Singleton
             Sixth = Role("sixth");
 
             CommonConfig = ConfigurationFactory.ParseString(@"
-            akka.loglevel = DEBUG
-            akka.actor.provider = ""Akka.Cluster.ClusterActorRefProvider, Akka.Cluster""
-            akka.remote.log-remote-lifecycle-events = off
-            akka.cluster.auto-down-unreachable-after = 0s
+                akka.loglevel = DEBUG
+                akka.actor.provider = ""Akka.Cluster.ClusterActorRefProvider, Akka.Cluster""
+                akka.remote.log-remote-lifecycle-events = off
+                akka.cluster.auto-down-unreachable-after = 0s
             ")
             .WithFallback(ClusterSingletonManager.DefaultConfig())
+            .WithFallback(ClusterSingletonProxy.DefaultConfig())
             .WithFallback(MultiNodeClusterSpec.ClusterConfig());
         }
     }
 
-    public class ClusterSingletonManagerChaosNode1 : ClusterSingletonManagerChaosConfig { }
-    public class ClusterSingletonManagerChaosNode2 : ClusterSingletonManagerChaosConfig { }
-    public class ClusterSingletonManagerChaosNode3 : ClusterSingletonManagerChaosConfig { }
-    public class ClusterSingletonManagerChaosNode4 : ClusterSingletonManagerChaosConfig { }
-    public class ClusterSingletonManagerChaosNode5 : ClusterSingletonManagerChaosConfig { }
-    public class ClusterSingletonManagerChaosNode6 : ClusterSingletonManagerChaosConfig { }
-    public class ClusterSingletonManagerChaosNode7 : ClusterSingletonManagerChaosConfig { }
+    public class ClusterSingletonManagerChaosNode1 : ClusterSingletonManagerChaosSpec { }
+    public class ClusterSingletonManagerChaosNode2 : ClusterSingletonManagerChaosSpec { }
+    public class ClusterSingletonManagerChaosNode3 : ClusterSingletonManagerChaosSpec { }
+    public class ClusterSingletonManagerChaosNode4 : ClusterSingletonManagerChaosSpec { }
+    public class ClusterSingletonManagerChaosNode5 : ClusterSingletonManagerChaosSpec { }
+    public class ClusterSingletonManagerChaosNode6 : ClusterSingletonManagerChaosSpec { }
+    public class ClusterSingletonManagerChaosNode7 : ClusterSingletonManagerChaosSpec { }
 
     public abstract class ClusterSingletonManagerChaosSpec : MultiNodeClusterSpec
     {
-        protected ClusterSingletonManagerChaosSpec() : base(new ClusterSingletonManagerChaosConfig())
+        private class EchoStarted
         {
+            public static readonly EchoStarted Instance = new EchoStarted();
+
+            private EchoStarted() { }
+        }
+
+        private class EchoActor : ReceiveActor
+        {
+            public EchoActor(IActorRef testActor)
+            {
+                testActor.Tell(EchoStarted.Instance);
+                ReceiveAny(_ => Sender.Tell(Self));
+            }
+        }
+
+        private readonly ClusterSingletonManagerChaosConfig _config;
+
+        protected ClusterSingletonManagerChaosSpec() : this(new ClusterSingletonManagerChaosConfig())
+        {
+        }
+
+        protected ClusterSingletonManagerChaosSpec(ClusterSingletonManagerChaosConfig config) : base(config)
+        {
+            _config = config;
         }
 
         protected override int InitialParticipantsValueFactory { get { return Roles.Count; } }
 
-        //[MultiNodeFact(Skip = "TODO")]
+        [MultiNodeFact]
         public void ClusterSingletonManager_in_chaotic_cluster_should_startup_6_node_cluster()
         {
-            Within(TimeSpan.FromMinutes(1), () =>
+            Within(TimeSpan.FromSeconds(60), () =>
             {
                 var memberProbe = CreateTestProbe();
-                Cluster.Get(Sys).Subscribe(memberProbe.Ref, new[] { typeof(ClusterEvent.MemberUp) });
+                Cluster.Subscribe(memberProbe.Ref, new[] { typeof(ClusterEvent.MemberUp) });
                 memberProbe.ExpectMsg<ClusterEvent.CurrentClusterState>();
 
-                var first = GetRole("first");
-                var second = GetRole("second");
-                var third = GetRole("third");
-                var fourth = GetRole("fourth");
-                var fifth = GetRole("fifth");
-                var sixth = GetRole("sixth");
-
-                AwaitClusterUp(first, second, third, fourth, fifth, sixth);
-
-                Join(first, first);
-                AwaitMemberUp(memberProbe, first);
+                Join(_config.First, _config.First);
+                AwaitMemberUp(memberProbe, _config.First);
                 RunOn(() =>
                 {
                     ExpectMsg<EchoStarted>();
-                }, first);
-                EnterBarrier("first-started");
+                }, _config.First);
+                EnterBarrier("_config.First-started");
 
-                Join(second, first);
-                AwaitMemberUp(memberProbe, second, first);
+                Join(_config.Second, _config.First);
+                AwaitMemberUp(memberProbe, _config.Second, _config.First);
 
-                Join(third, first);
-                AwaitMemberUp(memberProbe, third, second, first);
+                Join(_config.Third, _config.First);
+                AwaitMemberUp(memberProbe, _config.Third, _config.Second, _config.First);
 
-                Join(fourth, first);
-                AwaitMemberUp(memberProbe, fourth, third, second, first);
+                Join(_config.Fourth, _config.First);
+                AwaitMemberUp(memberProbe, _config.Fourth, _config.Third, _config.Second, _config.First);
 
-                Join(fifth, first);
-                AwaitMemberUp(memberProbe, fifth, fourth, third, second, first);
+                Join(_config.Fifth, _config.First);
+                AwaitMemberUp(memberProbe, _config.Fifth, _config.Fourth, _config.Third, _config.Second, _config.First);
 
-                Join(sixth, first);
-                AwaitMemberUp(memberProbe, sixth, fifth, fourth, third, second, first);
-
-                RunOn(() =>
-                {
-                    Echo(first).Tell("hello");
-                    Assert.Equal(ExpectMsg<IActorRef>(TimeSpan.FromSeconds(3)).Path.Address, Node(first).Address);
-                }, GetRole("controller"));
-
-                EnterBarrier("first-verified");
-            });
-        }
-
-        //[MultiNodeFact]
-        public void ClusterSingletonManager_in_chaotic_cluster_should_take_over_when_tree_oldest_nodes_crash_in_6_nodes_cluster()
-        {
-            ClusterSingletonManager_in_chaotic_cluster_should_startup_6_node_cluster();
-
-            Within(TimeSpan.FromSeconds(90), () =>
-            {
-                // mute logging of deadLetters during shutdown of systems
-                if (!Log.IsDebugEnabled)
-                    Sys.EventStream.Publish(new Mute(new WarningFilter()));
-                EnterBarrier("logs-muted");
-
-                var first = GetRole("first");
-                var second = GetRole("second");
-                var third = GetRole("third");
-                var fourth = GetRole("fourth");
-
-                Crash(first, second, third);
-                EnterBarrier("after-crash");
-                RunOn(() =>
-                {
-                    ExpectMsg<EchoStarted>();
-                }, fourth);
-                EnterBarrier("fourth-active");
+                Join(_config.Sixth, _config.First);
+                AwaitMemberUp(memberProbe, _config.Sixth, _config.Fifth, _config.Fourth, _config.Third, _config.Second, _config.First);
 
                 RunOn(() =>
                 {
-                    Echo(fourth).Tell("hello");
-                    var address = ExpectMsg<IActorRef>(TimeSpan.FromSeconds(3)).Path.Address;
-                    Assert.Equal(address, Node(fourth).Address);
-                }, GetRole("controller"));
-                EnterBarrier("fourth-verified");
+                    Echo(_config.First).Tell("hello");
+                    ExpectMsg<IActorRef>(TimeSpan.FromSeconds(3)).Path.Address
+                        .Should()
+                        .Be(GetAddress(_config.First));
+                }, _config.Controller);
+
+                EnterBarrier("_config.First-verified");
             });
         }
 
@@ -172,27 +139,15 @@ namespace Akka.Cluster.Tools.Tests.Singleton
         {
             RunOn(() =>
             {
-                Cluster.Get(Sys).Join(Node(to).Address);
+                Cluster.Join(GetAddress(to));
                 CreateSingleton();
             }, from);
         }
 
-        private RoleName GetRole(string name)
-        {
-            return Roles.First(roleName => roleName.Name == name);
-        }
-
         private IActorRef CreateSingleton()
         {
-            /**
-            system.actorOf(ClusterSingletonManager.props(
-              singletonProps = Props(classOf[Echo], testActor),
-              terminationMessage = PoisonPill,
-              settings = ClusterSingletonManagerSettings(system)),
-              name = "echo")
-            */
             return Sys.ActorOf(ClusterSingletonManager.Props(
-                singletonProps: Props.Create(() => new Echo(TestActor)),
+                singletonProps: Props.Create(() => new EchoActor(TestActor)),
                 terminationMessage: PoisonPill.Instance,
                 settings: ClusterSingletonManagerSettings.Create(Sys)),
                 name: "echo");
@@ -204,38 +159,41 @@ namespace Akka.Cluster.Tools.Tests.Singleton
             {
                 foreach (var roleName in roles)
                 {
-                    Log.Info("Shutdown [{0}]", roleName);
+                    Log.Info("Shutdown [{0}]", GetAddress(roleName));
                     TestConductor.Exit(roleName, 0).Wait(TimeSpan.FromSeconds(10));
                 }
-            }, GetRole("controller") /*controller*/);
+            }, _config.Controller);
         }
 
         private ActorSelection Echo(RoleName oldest)
         {
-            return Sys.ActorSelection(Node(oldest) / "user" / "echo" / "singleton");
+            return Sys.ActorSelection(new RootActorPath(GetAddress(oldest)) / "user" / "echo" / "singleton");
         }
 
         private void AwaitMemberUp(TestProbe memberProbe, params RoleName[] nodes)
         {
-            RunOn(() =>
+            if (nodes.Length > 1)
             {
-                var address = memberProbe.ExpectMsg<ClusterEvent.MemberUp>(TimeSpan.FromSeconds(15)).Member.Address;
-                var headAddress = Node(nodes[0]).Address;
-                Assert.Equal(address, headAddress);
-            }, nodes.Where(n => n != nodes[0]).ToArray());
+                RunOn(() =>
+                {
+                    memberProbe.ExpectMsg<ClusterEvent.MemberUp>(TimeSpan.FromSeconds(15)).Member.Address
+                        .Should()
+                        .Be(GetAddress(nodes.First()));
+                }, nodes.Skip(1).ToArray());
+            }
 
             RunOn(() =>
             {
-                var addresses = new HashSet<Address>(memberProbe.ReceiveN(nodes.Length, TimeSpan.FromSeconds(15))
+                var roleNodes = nodes.Select(node => GetAddress(node));
+
+                var addresses = memberProbe.ReceiveN(nodes.Length, TimeSpan.FromSeconds(15))
                     .Where(x => x is ClusterEvent.MemberUp)
-                    .Select(x => (x as ClusterEvent.MemberUp).Member.Address));
+                    .Select(x => (x as ClusterEvent.MemberUp).Member.Address);
 
-                var rolenodes = nodes.Select(n => Node(n).Address).ToList();
-                Assert.Equal(addresses, rolenodes);
+                addresses.Except(roleNodes).Count().Should().Be(0);
+            }, nodes.First());
 
-                EnterBarrier(nodes[0].Name + "-up");
-
-            }, nodes[0]);
+            EnterBarrier(nodes.First().Name + "-up");
         }
     }
 }
