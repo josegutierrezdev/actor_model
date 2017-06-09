@@ -6,8 +6,9 @@
 //-----------------------------------------------------------------------
 
 using Akka.Configuration;
+using Akka.Persistence.Query;
 using Akka.Persistence.Query.Sql;
-using Akka.Persistence.Sql.TestKit;
+using Akka.Persistence.TCK.Query;
 using Akka.Util.Internal;
 using Xunit.Abstractions;
 
@@ -37,8 +38,9 @@ namespace Akka.Persistence.Sqlite.Tests.Batching
             akka.test.single-expect-default = 10s")
             .WithFallback(SqlReadJournal.DefaultConfiguration());
 
-        public BatchingSqliteEventsByTagSpec(ITestOutputHelper output) : base(Config(Counter.GetAndIncrement()), output)
+        public BatchingSqliteEventsByTagSpec(ITestOutputHelper output) : base(Config(Counter.GetAndIncrement()), nameof(BatchingSqliteEventsByTagSpec), output)
         {
+            ReadJournal = Sys.ReadJournalFor<SqlReadJournal>(SqlReadJournal.Identifier);
         }
     }
 }
