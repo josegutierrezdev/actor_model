@@ -70,11 +70,11 @@ namespace Akka.Cluster.Sharding.Tests
             switch (message)
             {
                 case int i:
-                    return (i % 10).ToString();
+                    return (i % 10 + 1).ToString();
                 // must support ShardRegion.StartEntity in order for
                 // GetEntityLocation to work properly
                 case ShardRegion.StartEntity se:
-                    return se.EntityId;
+                    return (int.Parse(se.EntityId) % 10 + 1).ToString();
             }
 
             throw new NotSupportedException();
